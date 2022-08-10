@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import torch
 
 
 @dataclass
@@ -51,34 +52,39 @@ class Entity:
     ## will return the appropriate value for the map, whether that be
     ## a health, or just constant 1
     def call(self) -> torch.Tensor:
-        pass
+        return torch.tensor(1)
+
+    ## will just take the map and add the output of its call() to 
+    ## its corresponding coordinates on the map
+    ## but some classes like the bomb needs to do extra stuff
+    def update_map(self, target: torch.Tensor):
+        target[self.coord.x, self.coord.y] = self.call()
 
 @dataclass
 class Indestructible(Entity):
-    def call(self) -> torhc.Tensor:
-        return torch.tensor
+    pass
 
 @dataclass
 class Destructible(Entity):
     hp: int
     def call(self):
-        return self.hp
+        return torch.tensor(self.hp)
 
 @dataclass
 class Pickup(Entity):
-    gives: int
-    ## 0 for bomb, 1 for ammo
-    ## no idea how to implement this better
+    ## though seemingly an unnecessary level of abstraction for the two
+    ## pickups considering no code is in this class, instances of the
+    ## radius and ammo pickups also both being instances of pickups
+    ## makes some things very convenient
+    pass
 
 @dataclass
 class Radius(Pickup):
-    def call(self):
-        return 1
+    pass
 
 @dataclass
 class Ammo(Pickup):
-    def call(self):
-        return 1
+    pass
 
 @dataclass
 class Bomb(Entity):
@@ -86,6 +92,16 @@ class Bomb(Entity):
     expires: int
     hp: int
     blastDiameter: int
+    
+    ## we need to consider the bomb's collision
+    ## so we can't just use the initial plan of
+    ## the bomb map being the fire map
+    def call(self):
+        return torch.tensor([self.expires, self.hp, self.blastDiamter])
+
+    def update_map(self, target: torch.Tensor):
+        target[..., self.coord.x, self.coord.y] = self.call()
+    
 
 @dataclass
 class Fire(Entity):
@@ -95,8 +111,8 @@ class Fire(Entity):
     owner: str
     expires: int
 
-
-
+    def call(self):
+        return torch.tensor(self.expires)
 
 ## Every turn, we will get a response from the api. With this class:
 ## 1. We parse the API response into a board state that contains python objects
@@ -119,16 +135,15 @@ class BoardState:
 
 
     ## Convert to tensors to use in an RL model
-    def to_learnable(self) -> None:
-    # def to_learnable(self) -> dict[str, torch.Tensor]:
+    # def to_learnable(self) -> None:
+    def to_learnable(self) -> dict[type, torch.Tensor]:
         unit_map = torch.zeros([self.width, self.height], dtype=torch.int32)
         indestructible_map = torch.zeros([self.width, self.height], dtype=torch.int32)
         destructible_map =  torch.zeros([self.width, self.height], dtype=torch.int32)
         # pickup_map = torch.zeros([self.width, self.height], dtype=torch.int32)
         radius_map = torch.zeros([self.width, self.height], dtype=torch.int32)
         ammo_map = torch.zeros([self.width, self.height], dtype=torch.int32)
-        ## bomb has 3 dimensions for expiration, hp, and blast diameter
-        bomb_map = torch.zeros([self.width, self.height], dtype=torch.int32)
+        bomb_map = torch.zeros([2, self.width, self.height], dtype=torch.int32)
         fire_map = torch.zeros([self.width, self.height], dtype=torch.int32)
         
         table = {
@@ -144,16 +159,13 @@ class BoardState:
 
         for entitiy in self.entities:
             class_map = table[type(entitiy)]
+            entity.update_map(class_map)
 
-            class_map[entitiy.coord.x, entity.coord.y] = entity.call()
+            ## just have a method in entity class that takes a map and updates it with the result of its call
+            ## then overload this method as necessary for the weirded entities like bombs and units
             
 
-        return None
-
-        # return {
-        #     "occupancy": occupancy_map,
-        #     "explosions": ...,
-        # }
+        return table
 
     ## Move units, etc
     def tick(actions: Dict[Entity, Action]) -> BoardState:
