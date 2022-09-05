@@ -56,6 +56,7 @@ class GameState:
                 break
 
     async def _on_data(self, data):
+        print(data)
 
         data_type = data.get("type")
 

@@ -4,11 +4,21 @@ import asyncio
 import random
 import os
 import time
+import classes
 
 uri = os.environ.get(
     'GAME_CONNECTION_STRING') or "ws://127.0.0.1:3000/?role=agent&agentId=agentA&name=defaultName"
 
 actions = ["up", "down", "left", "right", "bomb", "detonate"]
+
+def log(title, message):
+    for x in range(5):
+        print("================================")
+    print(title)
+    print()
+    print(message)
+    for x in range(5):
+        print("================================")
 
 
 class Agent():
